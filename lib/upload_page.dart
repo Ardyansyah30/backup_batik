@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:http/http.dart' as http; // Import package http
 import 'batik_result_page.dart';
 
 class UploadPage extends StatefulWidget {
@@ -24,9 +25,13 @@ class _UploadPageState extends State<UploadPage> {
   final double _outputScale = 0.031607624143362045;
   final int _outputZeroPoint = 184;
   final double _confidenceThreshold = 0.2;
+// Jika menggunakan Emulator Android
+  final String _backendApiUrl = 'http://10.0.2.2:8000/api'; // Menggunakan IP khusus untuk emulator Android
 
-  // Merapikan teks filosofi agar tidak ada spasi di awal setiap baris
-  // dan dijadikan satu paragraf agar perataan kiri kanan bekerja dengan baik.
+// Jika menggunakan Perangkat Android Fisik (ganti dengan IP lokal Anda)
+// final String _backendApiUrl = 'http://192.168.1.XXX:8000/api';
+
+
   final Map<String, Map<String, String>> _batikInfo = {
     'MOTIF BATIK AKA BAJELO': {
       'origin': 'Minangkabau (Sumatera Barat)',
@@ -153,6 +158,78 @@ class _UploadPageState extends State<UploadPage> {
     return input;
   }
 
+  // Tambahkan fungsi baru untuk mengirim data ke backend
+  Future<void> _sendToBackend({
+    required bool isBatik,
+    String? batikName,
+    String? batikOrigin,
+    String? batikPhilosophy,
+    double? confidence,
+  }) async {
+    if (_selectedImage == null) return;
+
+    final uri = Uri.parse('$_backendApiUrl/http://10.0.2.2:8000/api/upload-image');
+    final request = http.MultipartRequest('POST', uri);
+
+    request.files.add(await http.MultipartFile.fromPath('image', _selectedImage!.path));
+    request.fields['is_batik'] = isBatik.toString();
+
+    if (isBatik) {
+      request.fields['batik_name'] = batikName!;
+      request.fields['batik_origin'] = batikOrigin!;
+      request.fields['batik_philosophy'] = batikPhilosophy!;
+      request.fields['confidence'] = confidence.toString();
+    } else {
+      // Kirim data kosong jika bukan batik
+      request.fields['batik_name'] = '';
+      request.fields['batik_origin'] = '';
+      request.fields['batik_philosophy'] = 'Gambar bukan motif batik.';
+      request.fields['confidence'] = '0.0';
+    }
+
+    _showAlert(
+      type: QuickAlertType.loading,
+      title: 'Mengunggah Data',
+      text: 'Mengirim gambar dan hasil prediksi ke server...',
+      autoCloseDuration: null,
+    );
+
+    try {
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        if (response.statusCode == 201) {
+          _showAlert(
+            type: QuickAlertType.success,
+            title: 'Berhasil',
+            text: 'Gambar dan data berhasil diunggah ke server!',
+            autoCloseDuration: const Duration(seconds: 2),
+          );
+        } else {
+          _showAlert(
+            type: QuickAlertType.error,
+            title: 'Error Unggah',
+            text: 'Gagal mengunggah gambar. Status: ${response.statusCode}. Respon: $responseBody',
+          );
+          print('❌ Error mengunggah: ${response.statusCode}, Body: $responseBody');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showAlert(
+          type: QuickAlertType.error,
+          title: 'Error Koneksi',
+          text: 'Gagal terhubung ke server: $e',
+        );
+      }
+      print('❌ Error koneksi: $e');
+    }
+  }
+
+
   Future<void> _predictImage() async {
     if (_selectedImage == null || _interpreter == null || _labels.isEmpty || _isLoading) {
       return;
@@ -200,6 +277,8 @@ class _UploadPageState extends State<UploadPage> {
             title: 'Batik Tidak Dikenali',
             text: 'Kami tidak dapat mengidentifikasi motif batik atau motif tidak tersedia dalam database kami. Mohon coba gambar lain.',
           );
+          // Panggil _sendToBackend untuk kasus non-batik
+          _sendToBackend(isBatik: false);
         }
       } else {
         final double batikConfidence = topPrediction.value;
@@ -208,7 +287,17 @@ class _UploadPageState extends State<UploadPage> {
         final String batikOrigin = _batikInfo[topPrediction.key]?['origin'] ?? 'Tidak diketahui';
         final String batikPhilosophy = _batikInfo[topPrediction.key]?['philosophy'] ?? 'Filosofi tidak tersedia.';
 
+        // Panggil _sendToBackend untuk kasus gambar batik
+        await _sendToBackend(
+          isBatik: true,
+          batikName: topPrediction.key,
+          batikOrigin: batikOrigin,
+          batikPhilosophy: batikPhilosophy,
+          confidence: cappedConfidence,
+        );
+
         if (mounted) {
+          // Navigasi ke halaman hasil setelah pengiriman ke backend berhasil
           Navigator.of(context).pop();
           Navigator.push(
             context,
