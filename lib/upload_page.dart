@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:quickalert/quickalert.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:http/http.dart' as http; // Import package http
+import 'package:http/http.dart' as http;
 import 'batik_result_page.dart';
+import 'history_page.dart'; // Tambahkan impor untuk HistoryPage
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -29,7 +30,7 @@ class _UploadPageState extends State<UploadPage> {
   final String _backendApiUrl = 'http://10.0.2.2:8000/api'; // Menggunakan IP khusus untuk emulator Android
 
 // Jika menggunakan Perangkat Android Fisik (ganti dengan IP lokal Anda)
-// final String _backendApiUrl = 'http://192.168.1.XXX:8000/api';
+// final String _backendApiUrl = 'http://192.168.1.XXX:8000/api' http://10.0.2.2:8000/api ;
 
 
   final Map<String, Map<String, String>> _batikInfo = {
@@ -71,7 +72,7 @@ class _UploadPageState extends State<UploadPage> {
     },
     'MOTIF BATIK RUMAH GADANG': {
       'origin': 'Sumatera Barat',
-      'philosophy': '''motif Rumah Gadang melambangkan kebersamaan, kekerabatan, dan nilai musyawarah dalam adat Minangkabau. Rumah Gadang tidak hanya sebagai tempat tinggal, tapi juga pusat kehidupan sosial dan adat. Dalam batik, motif ini mencerminkan jati diri, struktur matrilineal, dan penghormatan terhadap leluhur dan nilai tradisional. Setiap lekukan dan susunan motifnya menggambarkan kerukunan antar keluarga besar yang tinggal dalam satu rumah gadang serta tingginya kedudukan perempuan dalam struktur adat Minang.'''
+      'philosophy': '''motif Rumah Gadang melambangkan kebersamaan, kekerabatan, dan nilai musyawarah dalam adat Minangkabau. Rumah Gadang tidak hanya sebagai tempat tinggal, tapi juga pusat kehidupan sosial dan adat. Dalam batik, motif ini mencerminkan jati diri, struktur matrilineial, dan penghormatan terhadap leluhur dan nilai tradisional. Setiap lekukan dan susunan motifnya menggambarkan kerukunan antar keluarga besar yang tinggal dalam satu rumah gadang serta tingginya kedudukan perempuan dalam struktur adat Minang.'''
     }
   };
 
@@ -158,33 +159,31 @@ class _UploadPageState extends State<UploadPage> {
     return input;
   }
 
-  // Tambahkan fungsi baru untuk mengirim data ke backend
   Future<void> _sendToBackend({
-    required bool isBatik,
+    required bool isMinangkabauBatik,
     String? batikName,
-    String? batikOrigin,
-    String? batikPhilosophy,
-    double? confidence,
+    String? description,
+    String? origin,
   }) async {
     if (_selectedImage == null) return;
 
-    final uri = Uri.parse('$_backendApiUrl/http://10.0.2.2:8000/api/upload-image');
+    final uri = Uri.parse('$_backendApiUrl/batiks/store');
     final request = http.MultipartRequest('POST', uri);
 
     request.files.add(await http.MultipartFile.fromPath('image', _selectedImage!.path));
-    request.fields['is_batik'] = isBatik.toString();
 
-    if (isBatik) {
-      request.fields['batik_name'] = batikName!;
-      request.fields['batik_origin'] = batikOrigin!;
-      request.fields['batik_philosophy'] = batikPhilosophy!;
-      request.fields['confidence'] = confidence.toString();
+    // Sesuaikan nama field dengan backend Laravel Anda
+    request.fields['is_minangkabau_batik'] = isMinangkabauBatik.toString();
+
+    if (isMinangkabauBatik) {
+      request.fields['batik_name'] = batikName ?? '';
+      request.fields['description'] = description ?? '';
+      request.fields['origin'] = origin ?? '';
     } else {
-      // Kirim data kosong jika bukan batik
-      request.fields['batik_name'] = '';
-      request.fields['batik_origin'] = '';
-      request.fields['batik_philosophy'] = 'Gambar bukan motif batik.';
-      request.fields['confidence'] = '0.0';
+      // Kirim data kosong jika bukan batik Minangkabau
+      request.fields['batik_name'] = 'Bukan Batik Minangkabau';
+      request.fields['description'] = 'Gambar bukan motif batik Minangkabau.';
+      request.fields['origin'] = '';
     }
 
     _showAlert(
@@ -269,35 +268,33 @@ class _UploadPageState extends State<UploadPage> {
 
       final topPrediction = sortedPredictions.first;
 
-      if (topPrediction.value < _confidenceThreshold || !_batikInfo.containsKey(topPrediction.key)) {
+      if (topPrediction.value < _confidenceThreshold) {
         if (mounted) {
           Navigator.of(context).pop();
           _showAlert(
             type: QuickAlertType.warning,
             title: 'Batik Tidak Dikenali',
-            text: 'Kami tidak dapat mengidentifikasi motif batik atau motif tidak tersedia dalam database kami. Mohon coba gambar lain.',
+            text: 'Kami tidak dapat mengidentifikasi motif batik. Mohon coba gambar lain.',
           );
-          // Panggil _sendToBackend untuk kasus non-batik
-          _sendToBackend(isBatik: false);
+          await _sendToBackend(isMinangkabauBatik: false);
         }
       } else {
         final double batikConfidence = topPrediction.value;
-        // Batasi nilai kepercayaan agar tidak melebihi 100% (1.0).
         final double cappedConfidence = batikConfidence > 1.0 ? 1.0 : batikConfidence;
         final String batikOrigin = _batikInfo[topPrediction.key]?['origin'] ?? 'Tidak diketahui';
         final String batikPhilosophy = _batikInfo[topPrediction.key]?['philosophy'] ?? 'Filosofi tidak tersedia.';
 
-        // Panggil _sendToBackend untuk kasus gambar batik
+        // Asumsi semua batik yang teridentifikasi adalah batik Minangkabau
+        final bool isMinangkabauBatik = _batikInfo.containsKey(topPrediction.key);
+
         await _sendToBackend(
-          isBatik: true,
+          isMinangkabauBatik: isMinangkabauBatik,
           batikName: topPrediction.key,
-          batikOrigin: batikOrigin,
-          batikPhilosophy: batikPhilosophy,
-          confidence: cappedConfidence,
+          origin: batikOrigin,
+          description: batikPhilosophy,
         );
 
         if (mounted) {
-          // Navigasi ke halaman hasil setelah pengiriman ke backend berhasil
           Navigator.of(context).pop();
           Navigator.push(
             context,
@@ -395,6 +392,27 @@ class _UploadPageState extends State<UploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Deteksi Batik',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: const Color(0xFF8B4513),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HistoryPage()),
+              );
+            },
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           Positioned.fill(
