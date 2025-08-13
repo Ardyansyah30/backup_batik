@@ -4,10 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-// Ganti dengan URL API backend Anda. Gunakan 10.0.2.2 untuk emulator.
+  // Ganti dengan URL API backend Anda. Gunakan 10.0.2.2 untuk emulator.
   static const String _baseUrl = 'http://10.0.2.2:8000/api';
 
-// --- Fungsi untuk Login Pengguna ---
+  // --- Fungsi untuk Login Pengguna ---
   static Future<http.Response> login(String email, String password) async {
     final url = Uri.parse('$_baseUrl/login');
     final response = await http.post(
@@ -21,7 +21,7 @@ class ApiService {
     return response;
   }
 
-// --- Fungsi untuk Registrasi Pengguna ---
+  // --- Fungsi untuk Registrasi Pengguna ---
   static Future<http.Response> register(String name, String email, String password) async {
     final url = Uri.parse('$_baseUrl/register');
     final response = await http.post(
@@ -37,7 +37,7 @@ class ApiService {
     return response;
   }
 
-// --- Fungsi untuk Otentikasi dan Token ---
+  // --- Fungsi untuk Otentikasi dan Token ---
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('access_token');
@@ -53,14 +53,15 @@ class ApiService {
     await prefs.remove('access_token');
   }
 
-// --- Fungsi untuk Mengambil Data Riwayat Batik ---
+  // ✅ PERBAIKAN: Fungsi untuk Mengambil Data Riwayat Batik
+  // URL diubah dari '/my-batiks' menjadi '/histories' agar konsisten dengan backend.
   static Future<http.Response> getMyBatiks() async {
     final token = await getToken();
     if (token == null) {
       return http.Response(json.encode({'message': 'Unauthenticated.'}), 401);
     }
 
-    final url = Uri.parse('$_baseUrl/my-batiks');
+    final url = Uri.parse('$_baseUrl/histories'); // ✅ URL diperbaiki
     final response = await http.get(
       url,
       headers: {
@@ -72,7 +73,7 @@ class ApiService {
     return response;
   }
 
-// --- Fungsi untuk Mengunggah Batik Baru ---
+  // --- Fungsi untuk Mengunggah Batik Baru (deteksi atau kontribusi) ---
   static Future<http.Response> uploadBatik({
     required File imageFile,
     required bool isMinangkabauBatik,
@@ -93,13 +94,16 @@ class ApiService {
 
     request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
 
-// ✅ PERBAIKAN: Kirim nilai boolean sebagai string "true" atau "false"
-// Ini sesuai dengan validasi di BatikController yang mengharapkan 'string'
+    // ✅ Perbaikan: Kirim nilai boolean sebagai string "true" atau "false"
+    // Ini penting untuk validasi di backend Laravel
     request.fields['is_minangkabau_batik'] = isMinangkabauBatik.toString();
+
+    // ✅ Perbaikan: Kirim data hanya jika isMinangkabauBatik bernilai true,
+    // sesuai dengan validasi `required_if` di backend.
     if (isMinangkabauBatik) {
-      request.fields['batik_name'] = batikName ?? 'Batik tidak teridentifikasi';
-      request.fields['description'] = description ?? 'Deskripsi tidak tersedia.';
-      request.fields['origin'] = origin ?? 'Tidak diketahui';
+      request.fields['batik_name'] = batikName ?? '';
+      request.fields['description'] = description ?? '';
+      request.fields['origin'] = origin ?? '';
     } else {
       request.fields['batik_name'] = 'Bukan Batik Minangkabau';
       request.fields['description'] = 'Gambar bukan motif batik Minangkabau.';

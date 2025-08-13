@@ -12,6 +12,7 @@ import 'batik_result_page.dart';
 import 'history_page.dart';
 import 'package:batik/services/api_service.dart';
 import 'login_page.dart';
+import 'contribution_page.dart'; // ✅ Impor halaman kontribusi
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -155,7 +156,7 @@ class _UploadPageState extends State<UploadPage> {
   }) async {
     if (_selectedImage == null) return;
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
+    final token = prefs.getString('access_token');
     if (token == null) {
       if (mounted) {
         _showAlert(
@@ -554,6 +555,27 @@ class _UploadPageState extends State<UploadPage> {
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
+                const SizedBox(height: 20), // Tambahkan jarak
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ContributionPage()),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    "KONTRIBUSI BATIK ANDA",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
           ),
